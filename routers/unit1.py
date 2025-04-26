@@ -1,6 +1,8 @@
 from fastapi import APIRouter # type: ignore
 from schemas.bisection import BisectionRequest, BisectionResponse
+from schemas.bolzano import BolzanoRequest, BolzanoResponse
 from methods.bisection import bisection_method
+from methods.bolzano import evaluate_bolzano
 from pydantic import ValidationError
 
 router = APIRouter()
@@ -37,5 +39,37 @@ async def bisection(request: BisectionRequest):
         return BisectionResponse(
             success=False,
             message=f"Error inesperado: {str(e)}",
+            data=None
+        )
+
+
+@router.post('/bolzano', response_model=BolzanoResponse)
+async def bolzano(request: BolzanoRequest):
+    try:
+        # Validación manual de los datos, útil si se extiende con reglas adicionales
+        try:
+            request_data = BolzanoRequest(
+                function=request.function,
+                xi=request.xi,
+                xs=request.xs,
+                decimals=request.decimals
+            )
+        except ValidationError as e:
+            return BolzanoResponse(
+                success=False,
+                message=f"Error de validación: {str(e)}",
+                #theoremSatisfied=False,
+                data=None
+            )
+
+        # Ejecutar el método de la bisección
+        return await evaluate_bolzano(request_data)
+
+    except Exception as e:
+        # Captura de errores no controlados
+        return BolzanoResponse(
+            success=False,
+            message=f"Error inesperado: {str(e)}",
+            #theoremSatisfied=False,
             data=None
         )

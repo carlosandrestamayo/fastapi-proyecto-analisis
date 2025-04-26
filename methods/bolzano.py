@@ -1,58 +1,93 @@
-from sympy import symbols, lambdify, sympify # type: ignore
-from schemas.bolzano import BolzanoRequest, BolzanoResponse, BolzanoData, BolzanoSteps
+import math
+from methods.util import evaluate_function, parse_user_function
+from schemas.bolzano import BolzanoRequest, BolzanoResponse, BolzanoData
+from sympy import Interval, symbols
+from sympy.calculus.util import continuous_domain
 
-def teorema_bolzano(request: BolzanoRequest):
-    x = symbols('x')
+# Definir el símbolo 'x' para evaluación simbólica
+x = symbols('x')
+
+async def evaluate_bolzano(data: BolzanoRequest):
+    """
+    Evalúa si se cumple el Teorema de Bolzano para una función dada en un intervalo [xi, xs].
+    Valida continuidad, signos, evaluabilidad de extremos y retorna información detallada.
+    """
     try:
+        # Extraer datos del request
+        raw_fn = data.function
+        xi = data.xi
+        xs = data.xs
+        decimals = data.decimals
 
-        xi = request.xi
-        xs = request.xs
-
+        # Validar que xi < xs
         if xi >= xs:
-            raise ValueError("Xi debe ser menor que Xs")
+            return BolzanoResponse(
+                success=False,
+                message="Xi debe ser menor que Xs.",
+                data=None
+            )
 
-        fx = sympify(request.function)
-        f = lambdify(x, fx, modules=["math"])
-    
-        fxi = round(f(request.xi), request.decimals)
-        fxs = round(f(request.xs), request.decimals)
-        product = round(fxi * fxs, request.decimals)
-    
-        theorem_satisfied = product < 0
+        # Parsear y preparar función del usuario
+        fn = parse_user_function(raw_fn)
 
-        if theorem_satisfied:
-            result_msg = f"Hay al menos una raíz en el intervalo [{request.xi}, {request.xs}]"
-        else:
-            result_msg = f"La existencia de una raíz en el intervalo [{request.xi}, {request.xs}] no está garantizada."
+        # Evaluar función en xi y xs
+        fxi = evaluate_function(fn, xi, decimals)
+        fxs = evaluate_function(fn, xs, decimals)
 
-        
-        steps = BolzanoSteps(
-            step1="f(Xi) =" + request.function.replace('x',f"({request.xi})") + " = " + str(fxi),
-            step2="f(Xs) =" + request.function.replace('x',f"({request.xs})") + " = " + str(fxs),
-            step3=f"Calcular el producto  f(Xi) * f(Xs) = {fxi} * {fxs} = {product}.",
-            step4=f"Como el producto es menor que cero, hay al menos una raíz en el intervalo [{xi}, {xs}]" if theorem_satisfied
-                else f"Como el producto no es menor que cero, no se garantiza la existencia de una raíz en el intervalo [{xi}, {xs}]",
-            
+        # Validar si fxi o fxs son NaN o Inf
+        errors = []
+        if math.isnan(fxi) or math.isinf(fxi):
+            errors.append(f"en xi = {xi}")
+        if math.isnan(fxs) or math.isinf(fxs):
+            errors.append(f"en xs = {xs}")
+
+        if errors:
+            error_message = "La función no se puede evaluar " + " y ".join(errors) + "."
+            return BolzanoResponse(
+                success=False,
+                message=error_message,
+                data=None
+            )
+
+        # Verificar continuidad en el intervalo [xi, xs]
+        domain = continuous_domain(fn, x, Interval(xi, xs))
+        is_continuous = domain.contains(xi) and domain.contains(xs)
+
+        # Calcular y redondear el producto f(xi) * f(xs)
+        product = round(fxi * fxs, decimals)  # 👈 Redondeo correcto
+
+        # Evaluar condición de Bolzano
+        theorem_satisfied = bool(is_continuous and (product < 0))
+
+        # Preparar datos de respuesta incluyendo el producto
+        response_data = BolzanoData(
+            xi=xi,
+            xs=xs,
+            fxi=fxi,
+            fxs=fxs,
+            product=product,
+            theoremSatisfied=theorem_satisfied
         )
 
+        # Construir mensaje de acuerdo al resultado
+        if theorem_satisfied:
+            message = "La función es continua en el intervalo y hay cambio de signo. Se cumple Bolzano."
+        elif is_continuous and not (product < 0):
+            message = "La función es continua en el intervalo, pero no hay cambio de signo. No se cumple Bolzano."
+        else:
+            message = "La función no es continua en el intervalo dado. No se puede aplicar Bolzano."
+
+        # Retornar respuesta exitosa
         return BolzanoResponse(
             success=True,
-            message="Verification completed",
-            data=BolzanoData(
-                result=result_msg,
-                fxi=fxi,
-                fxs=fxs,
-                product=product,
-                theorem_satisfied=theorem_satisfied,
-                steps=steps
-            )
+            message=message,
+            data=response_data
         )
 
-        
     except Exception as e:
+        # Captura y responde cualquier otra excepción inesperada
         return BolzanoResponse(
-           success=False,
-           message=str(e),
-           data= None
+            success=False,
+            message=f"Error al evaluar la función exception: {str(e)}",
+            data=None
         )
-    
