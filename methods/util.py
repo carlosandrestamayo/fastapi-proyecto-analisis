@@ -1,10 +1,10 @@
-from sympy import sympify, symbols, lambdify, diff
+from sympy import sympify, symbols, lambdify, diff, latex
 from sympy.core.sympify import SympifyError
 from schemas.bisection import BisectionResponse
 from typing import List
-from sympy.parsing.sympy_parser import parse_expr, standard_transformations, convert_xor
 import re
-from sympy.parsing.sympy_parser import parse_expr, standard_transformations, convert_xor
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application, convert_xor
+from sympy import sympify, symbols, exp, log, sin, cos, tan, sqrt
 
 x = symbols('x')  # Declaramos la variable x globalmente
 
@@ -87,3 +87,73 @@ def validar_funcion_sympy(expr_str: str, variables_permitidas: List[str] = ["x"]
             message=f"La función es inválida: {str(e)}",
             data=None
         )
+    
+
+def convert_to_sympy_expr(expr_str, variables=None):
+    """
+    Convierte expresiones matemáticas escritas en notación común a expresiones válidas de sympy.
+
+    Soporta:
+    - e^x → exp(x)
+    - ln(x) → log(x)
+    - sin, cos, tan
+    - √x o √(x) → sqrt(x)
+    - Multiplicación implícita: 2x → 2*x, 3(x+1) → 3*(x+1), (x+1)(x-1) → (x+1)*(x-1)
+
+    Parámetros:
+    - expr_str: str, expresión matemática en notación de usuario
+    - variables: lista de variables usadas en la expresión (ej. ["x", "y"])
+
+    Retorna:
+    - expresión sympy
+    """
+
+    # Paso 1: normalizar potencias
+    expr_str = expr_str.replace('^', '**')
+
+    # Paso 2: reemplazos de funciones
+    expr_str = re.sub(r'e\^\((.*?)\)', r'exp(\1)', expr_str)
+    expr_str = re.sub(r'\be\^(\w+)', r'exp(\1)', expr_str)
+    expr_str = re.sub(r'\bln\((.*?)\)', r'log(\1)', expr_str)
+    expr_str = re.sub(r'\bsin\((.*?)\)', r'sin(\1)', expr_str)
+    expr_str = re.sub(r'\bcos\((.*?)\)', r'cos(\1)', expr_str)
+    expr_str = re.sub(r'\btan\((.*?)\)', r'tan(\1)', expr_str)
+    expr_str = re.sub(r'√\((.*?)\)', r'sqrt(\1)', expr_str)
+    expr_str = re.sub(r'√(\w+)', r'sqrt(\1)', expr_str)
+
+    # Paso 3: multiplicación implícita
+    # a) Número seguido de variable o paréntesis: 2x → 2*x, 3(x+1) → 3*(x+1)
+    expr_str = re.sub(r'(\d)([a-zA-Z(])', r'\1*\2', expr_str)
+
+    # b) Variable o paréntesis seguida de paréntesis: x(x+1) o )(
+    expr_str = re.sub(r'([a-zA-Z0-9)])\s*\(', r'\1*(', expr_str)
+
+    # c) Paréntesis seguida de variable: )(x) → )*x
+    expr_str = re.sub(r'\)([a-zA-Z])', r')*\1', expr_str)
+
+    # Paso 4: definir variables simbólicas
+    if variables is None:
+        variables = ['x']
+    sympy_vars = symbols(variables)
+
+    # Paso 5: convertir a sympy
+    return sympify(expr_str, locals={str(var): var for var in sympy_vars})
+
+
+def convert_expresion_latex(expr):
+    transformations = standard_transformations + (implicit_multiplication_application,)
+    expr = parse_expr(expr.expression, transformations=transformations, evaluate=False)
+    #f = sympify(f_str)
+        # Resultado numérico
+        #resultado = expr.evalf()
+
+        # Expresión simbólica en LaTeX
+    expr_latex = latex(sympify(expr))
+    print(expr_latex)
+
+    return expr_latex
+
+    # return {
+    #     #"latex": f"${expr_latex}$"
+    #     "latex": expr_latex
+    # }

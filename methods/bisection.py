@@ -1,12 +1,15 @@
 from typing import List
-from sympy import symbols
+from sympy import lambdify, pretty, symbols, sympify
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, convert_xor
 from methods.util import (
+    convert_to_sympy_expr,
     teorema_bolzano,
     convert_to_decimal,
     tolerancia,
     error_relativo,
     evaluate_function,
-    parse_user_function
+    parse_user_function, 
+    convert_expresion_latex
 )
 from schemas.bisection import (
     BisectionRequest,
@@ -16,11 +19,63 @@ from schemas.bisection import (
     BisectionStep
 )
 
+from math import *
+import re
+
+x = symbols('x')  # Declaramos la variable x globalmente
+
 MAX_ITER = 30  # Límite de iteraciones para evitar bucles infinitos
 
 # Calcula el punto medio del intervalo [a, b], redondeado a un número de decimales
 def calculate_xr_biseccion(a: float, b: float, decimals: int) -> float:
     return round((a + b) / 2, decimals)
+
+from sympy import symbols, sympify, latex
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+
+
+def convertir_a_latex(expr_str):
+    try:
+        # Eliminar espacios
+        expr_str = expr_str.replace(" ", "")
+
+        # Transformaciones: activa multiplicación implícita
+        transformations = standard_transformations + (implicit_multiplication_application,)
+
+        #expr_str = "(-0.56)**3-(-0.56)-2"
+
+        # Convertir a expresión simbólica con evaluación activada
+        expr = parse_expr(expr_str, transformations=transformations, evaluate=True)
+
+        # Devolver en formato LaTeX
+        return latex(expr)
+    except Exception as e:
+        return f"Error: {e}"
+    
+def generar_latex_funcion_evaluada(funcion_str, valor_x, subindice):
+    # Definir símbolo
+    x = symbols('x')
+
+    # Convertir cadena a expresión simbólica
+    funcion = sympify(funcion_str)
+
+    # Obtener LaTeX de la función simbólica
+    funcion_latex = latex(funcion)
+
+    # Crear expresión reemplazando x por el valor
+    evaluacion_latex = funcion_latex.replace("x", f"({valor_x})")
+
+    # Evaluar la función numéricamente
+    resultado = funcion.subs(x, valor_x).evalf()
+
+    # Construir expresión completa en LaTeX
+    latex_final = (
+        #f"f({subindice}) = {funcion_latex} \\Rightarrow "
+        #f"f({valor_x}) = {evaluacion_latex} = {resultado:.4f}"
+        f"f({subindice}) = {evaluacion_latex} = {resultado:.4f}"
+    )
+
+    return latex_final
 
 # Método principal para ejecutar el método de la bisección
 async def bisection_method(data: BisectionRequest) -> BisectionResponse:
@@ -36,9 +91,18 @@ async def bisection_method(data: BisectionRequest) -> BisectionResponse:
         # Validar que xi < xs
         if xi >= xs:
             return BisectionResponse(success=False, message="Xi debe ser menor que Xs.", data=None)
+        
+        # Convertir la función con soporte para ^ como potencia
+        #transformations = standard_transformations + (convert_xor,)
+        #fn = parse_expr(raw_fn, transformations=transformations)
 
-        # Parsear y preparar la función del usuario
         fn = parse_user_function(raw_fn)
+        #sympy_expr = convert_to_sympy_expr(raw_fn)
+
+
+        print(generar_latex_funcion_evaluada(raw_fn, xi, "x_r"))
+
+        #print(convert_expresion_latex(raw_fn))
 
         # Inicializar variables de control
         iteration = 1
@@ -77,16 +141,15 @@ async def bisection_method(data: BisectionRequest) -> BisectionResponse:
                 isRoot=False
             )
 
-            # Crear el paso a paso de esta iteración
             step = BisectionStep(
                 step1=str(iteration),
-                step2=f"xi = {xi}, xs = {xs}, xr = {xr}",
-                step3=f"xr = ({xi} + {xs}) / 2 = {xr}",
-                step4=f"Intervalos de [{xi}, {xr}] y [{xr}, {xs}]",
-                step5=f"f(Xi) = {raw_fn.replace('x', f'({xi})')} = {fxi}",
-                step6=f"f(Xs) = {raw_fn.replace('x', f'({xs})')} = {fxs}",
-                step7=f"f(Xr) = {raw_fn.replace('x', f'({xr})')} = {fxr}",
-                step8="",
+                step2=f"x_i = {xi} \\quad y \\quad x_s = {xs}",
+                step3= "x_r = \\frac{((" + str(xi) +  ") + (" + str(xs) + "))}{2} = " + str(xr),
+                step4=  f"\\text{{Intervalos de }}\\, [{xi},\\ {xr}]  \\quad \\text{{y}} \\quad [{xr},\\ {xs}]",
+                step5= generar_latex_funcion_evaluada(raw_fn, xi, "x_i"),
+                step6= generar_latex_funcion_evaluada(raw_fn, xs, "x_s"),
+                step7= generar_latex_funcion_evaluada(raw_fn, xr, "x_r"),
+                step8= str(fxi) + " * " + str(fxr) + " = " + convert_to_decimal((fxi*fxr), decimals),
                 step9="",
                 step10="",
                 step11="Se tiene en cuenta el criterio de detenimiento después de la iteración 1."
@@ -110,12 +173,12 @@ async def bisection_method(data: BisectionRequest) -> BisectionResponse:
             # Actualizar intervalo según el signo de f(xr)
             if fxi * fxr < 0:
                 xs = xr
-                step.step8 = f"La raíz está en [{xi}, {xs}] porque f(xi)*f(xr) < 0."
-                step.step9 = f"Actualizamos xs = {xr}."
+                #step.step8 = f"La raíz está en [{xi}, {xs}] porque f(xi)*f(xr) < 0."
+                #step.step9 = f"Actualizamos xs = {xr}."
             else:
                 xi = xr
-                step.step8 = f"La raíz está en [{xi}, {xs}] porque f(xi)*f(xr) no es < 0."
-                step.step9 = f"Actualizamos xi = {xr}."
+                #step.step8 = f"La raíz está en [{xi}, {xs}] porque f(xi)*f(xr) no es < 0."
+                #step.step9 = f"Actualizamos xi = {xr}."
 
             # Evaluar criterios de parada
             finished = False

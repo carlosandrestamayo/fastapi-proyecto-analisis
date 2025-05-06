@@ -73,3 +73,39 @@ async def bolzano(request: BolzanoRequest):
             #theoremSatisfied=False,
             data=None
         )
+    
+    from fastapi import FastAPI
+from pydantic import BaseModel
+from sympy import symbols, sin, exp, sympify, latex, E
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+
+#app = FastAPI()
+
+x = symbols('x')  # Definimos símbolo para expresiones
+
+transformations = standard_transformations + (implicit_multiplication_application,)
+
+class ExpressionInput(BaseModel):
+    expression: str  # Por ejemplo: "sin(0) + E**0"
+
+@router.post("/evaluar")
+def evaluar_expresion(data: ExpressionInput):
+    try:
+        # Parseamos expresión como símbolo
+        expr = parse_expr(data.expression, transformations=transformations, evaluate=False)
+
+        # Resultado numérico
+        #resultado = expr.evalf()
+
+        # Expresión simbólica en LaTeX
+        expr_latex = latex(expr)
+
+        return {
+            "resultado": float(3),
+            #"latex": f"${expr_latex}$"
+            "latex": expr_latex
+        }
+
+        
+    except Exception as e:
+        return {"error": str(e)}

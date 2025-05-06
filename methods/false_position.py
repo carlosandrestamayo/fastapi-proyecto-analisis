@@ -36,7 +36,7 @@ async def bisection_method(data: BisectionRequest):
         criterion = data.criterion
         criterion_value = data.criterion_value
 
-         # Convertir la función con soporte para ^ como potencia
+        # Convertir la función con soporte para ^ como potencia
         transformations = standard_transformations + (convert_xor,)
         fn = parse_expr(raw_fn, transformations=transformations)
 
